@@ -1,6 +1,11 @@
 #!/usr/bin/env python3
 
 #### 0 - HEADER #####
+from sys import exit
+from datetime import datetime
+import signal
+import time
+
 try:
 	import ccxt #pip3 install ccxt
 except:
@@ -13,9 +18,6 @@ except:
 	print("[ERROR 92] pyfiglet not found: pip3 install pyfiglet")
 	exit(1)
 
-from datetime import datetime
-import signal
-import time
 #### FIN DU HEADER #####
 
 #### FUNNY DISPLAY INTO ####
@@ -26,8 +28,10 @@ print(result)
 #### 1 - PARAMS ####
 # Initalisation des diverses variables globales du script.
 print("[+] PARAMS")
-API_KEY = 'API KEY ID string'
-API_SECRET = 'API KEY SECRET password'
+#API_KEY = 'API KEY ID string'
+#API_SECRET = 'API KEY SECRET password'
+API_KEY = '73GisqkQqAy7MyQZj5RhYBKttgIjWFmoW7QeUWsminx8TNfBLoY3F2Qh3BlfOZCy'
+API_SECRET = 'xhpucJmBMUJDW7qqm5FtQYySWMyGYOgFfwPcnQfQVpUsCxxROsnKVHkYi91PbuRT'
 EX_BINANCE = ccxt.binance({ # Initialiser l'exchange Binance - En mode testnet
     'apiKey': API_KEY,
     'secret': API_SECRET,
@@ -41,6 +45,7 @@ SYMBOL = DST_SYMBOL + SRC_SYMBOL # symbole
 SYMBOL_SLASH = DST_SYMBOL + "/" + SRC_SYMBOL #symbole formaté avec un slash
 TRADING_QTY = 0.003  # Quantité unitaire à trader (par trade)
 TRADING_MAX = 10 # Nombe maximum de trades autorisés.
+RSI_PERIOD = 30 # l'historique (en minutes) pour le calcul du RSI
 SLEEP_TIME_SEC = 120 # nombre de secondes entre chaque itération
 #ci-dessous, des variables pour coloriser le texte (couleur)
 C_RED = '\033[1;31;40m'
@@ -84,7 +89,7 @@ def place_buy_order(exchange, symbol, quantity, ordertype = "market"):
 		order_cost = orderinfo['cost']
 		order_fees_cost = orderinfo['fees'][0]['cost']
 		order_fees_currency = orderinfo['fees'][0]['currency']
-		print("  [ACHAT] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
+		print(" [" + C_BLUE + "ACHAT" + C_NORMAL + "] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
 	else:
 		print("[ERROR 102] - unsupported type")
 		return "NaN"
@@ -92,7 +97,7 @@ def place_buy_order(exchange, symbol, quantity, ordertype = "market"):
 	return order['id']
 
 # Fonction pour placer un ordre de vente
-def place_sell_order(exchange, symbol, quantity, ordertype = "market"):
+def place_sell_order(exchange, symbol, quantity, ordertype = "market", nonewline=False):
 	order = "NaN"
 	if ordertype == "market":
 		order = exchange.create_market_sell_order(symbol, quantity)
@@ -101,7 +106,10 @@ def place_sell_order(exchange, symbol, quantity, ordertype = "market"):
 		order_cost = orderinfo['cost']
 		order_fees_cost = orderinfo['fees'][0]['cost']
 		order_fees_currency = orderinfo['fees'][0]['currency']
-		print("  [VENTE] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
+		if nonewline:
+			print(" [" + C_BLUE + "VENTE" + C_NORMAL + "] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]",end="")
+		else:
+			print(" [" + C_BLUE + "VENTE" + C_NORMAL + "] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
 	else:
 		print("[ERROR 103] - unsupported type")
 		return "NaN"
@@ -111,7 +119,7 @@ def place_sell_order(exchange, symbol, quantity, ordertype = "market"):
 # Fonction pour obtenir les données du marché
 # L'historique des données obtenues est de timestamp * limit.
 # Par défaut: 1mn * 15 = 15mn d'historique.
-def get_market_data(exchange, symbol, trigger="close",frame="1m",limit=15):
+def get_market_data(exchange, symbol, trigger="close",frame="1m",limit=RSI_PERIOD):
 	#OHLCV format
 	#[0] UTC timestamp in milliseconds, integer
 	#[1] (O)pen price, float
@@ -142,7 +150,9 @@ def get_market_data(exchange, symbol, trigger="close",frame="1m",limit=15):
 		final_array.append(data_array)
 	return final_array
 
-def calculate_rsi(exchange, symbol,trigger="close",frame="1m",limit=15):
+#La fonction calculate_rsi opère le calcul du RSI basé sur les données du marché récoltées.
+#Elle calcule donc le RSI à parti de la fonction get_market_data
+def calculate_rsi(exchange, symbol,trigger="close",frame="1m",limit=RSI_PERIOD):
 	data = get_market_data(exchange, symbol, trigger, frame, limit) #GET OHLCV data
 
 	deltas = [data[i][1] - data[i-1][1] for i in range(1, len(data))]
@@ -163,10 +173,24 @@ def calculate_rsi(exchange, symbol,trigger="close",frame="1m",limit=15):
 	rsi = float("{:.2f}".format(rsi))
 	return rsi
 
+# La fonction TEMINATE_handler sera executée lorsque l'on arrête le BOT (après un CTRL+C)
+# Son objectif sera de vendre tous les ordres en cours.
 def TERMINATE_handler(signum, frame):
 	print("[CTRL+C] EXIT signal ... Selling remaining orders then EXIT...pease wait")
-	for ordercpt in range(ORDERS_NBR):
-		place_sell_order(EX_BINANCE, SYMBOL, TRADING_QTY, "market")
+	for sell_cpt in range(ORDERS_NBR):
+		orderid = place_sell_order(EX_BINANCE, SYMBOL, TRADING_QTY, "market",nonewline=True)
+		sell_orderinfo = EX_BINANCE.fetch_order(id=orderid,symbol=SYMBOL)
+		sell_order_amount = sell_orderinfo['amount']
+		sell_order_cost = sell_orderinfo['cost']
+		sell_order_fees_cost = sell_orderinfo['fees'][0]['cost']
+		sell_order_fees_currency = sell_orderinfo['fees'][0]['currency']
+		print(" [BUYED AT: " + str(ORDERS_LIST[sell_cpt][1]) + "] ",end="")
+		if sell_order_cost > ORDERS_LIST[sell_cpt][1]:
+			print("--> " + C_GREEN + "GOOD TRADE" + C_NORMAL)
+		elif  sell_order_cost < ORDERS_LIST[sell_cpt][1]:
+			print("--> " + C_RED + "BAD TRADE" + C_NORMAL)
+		else:
+			print(" ")
 	print("[GOODBYE] Copyright: FunkyBot")
 	exit(1)
 #### FIN DU FONCTIONS #####
@@ -175,7 +199,7 @@ def TERMINATE_handler(signum, frame):
 #### 3 - CONFIG ####
 print("[+] CONFIG")
 print("  [-] La devise refuge est le " + C_GREEN + SRC_SYMBOL + C_NORMAL)
-print("  [-] La devise à commercer st le " + C_GREEN + DST_SYMBOL + C_NORMAL)
+print("  [-] La devise à commercer est le " + C_GREEN + DST_SYMBOL + C_NORMAL)
 print("  [-] L'objectif est donc de gagner des " + C_GREEN + SRC_SYMBOL + C_NORMAL + " en commercant le symbole " + C_GREEN + SYMBOL + C_NORMAL + " ( " + C_GREEN + SYMBOL_SLASH + C_NORMAL + " )")
 print("  [-] La fréquence d'analyse est de " + C_GREEN + str(SLEEP_TIME_SEC) + " secondes" + C_NORMAL)
 MY_INITIAL_SRC_QTY = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
@@ -185,6 +209,7 @@ TRADING_PRICE = float("{:.2f}".format(TRADING_QTY * AVG_PRICE))
 print("  [-] Les ordres sont de " + C_GREEN + str(TRADING_QTY) + " " + DST_SYMBOL + C_NORMAL + " ( environ " + C_GREEN + str(TRADING_PRICE) + " " + SRC_SYMBOL + C_NORMAL + " )")
 MAX_EXPOSURE = float("{:.2f}".format(TRADING_MAX * TRADING_PRICE))
 print("  [-] " + C_GREEN + str(TRADING_MAX) + C_NORMAL + " ordres sont cumulables pour une exposition maximum de " + C_GREEN + str(MAX_EXPOSURE) + " " + SRC_SYMBOL + C_NORMAL)
+print("  [-] La periode de calcul du RSI est de " + C_GREEN + str(RSI_PERIOD) + C_NORMAL + " minutes")
 ALLOWED_EXPOSURE = MY_INITIAL_SRC_QTY * 70/100
 if MAX_EXPOSURE > ALLOWED_EXPOSURE:
 	print("[ERROR 104] "+ C_RED + "CONFIG KO" + C_NORMAL + " L'exposition maximum ne doit pas dépasser 70% de ma quantité initiale.")
@@ -198,50 +223,85 @@ print("[+] INIT")
 signal.signal(signal.SIGINT, TERMINATE_handler) #fonction pour terminer le BOT lorsque CTRL+C
 
 ORDERS_NBR=0
+ORDERS_LIST=[]
+RSI_PREV=50
+RSI_PREV_PREV=50
 while True:
 	#STEP1 - on affiche la date/heure au format -  dd/mm/YY H:M:S
 	now = datetime.now()
 	DT_STR = now.strftime("%d/%m/%Y %H:%M:%S")
+	try:
+		#STEP2 - on calcule le RSI
+		RSI_VAL = calculate_rsi(EX_BINANCE,SYMBOL,limit=RSI_PERIOD)
 
-	#STEP2 - on calcule le RSI
-	RSI_VAL = calculate_rsi(EX_BINANCE,SYMBOL,limit=60)
+		#STEP3 - SIGNAL par rapport au RSI
+		SIGNAL="WAIT"
+		if ORDERS_NBR < TRADING_MAX and RSI_VAL < 30: #si on a pas ateint le MAX d'ordres en cours
+			if RSI_PREV < 30 and RSI_VAL > RSI_PREV:
+				if RSI_PREV_PREV < 30 and RSI_PREV < RSI_PREV_PREV:
+					SIGNAL="BUY"
+		elif ORDERS_NBR > 0 and RSI_VAL > 70:
+			SIGNAL="SELL"
+		RSI_PREV_PREV = RSI_PREV
+		RSI_PREV = RSI_VAL
 
-	#STEP3 - SIGNAL par rapport au RSI
-	SIGNAL="WAIT"
-	if ORDERS_NBR < TRADING_MAX and RSI_VAL <= 30: #si on a pas ateint le MAX d'ordres en cours
-		SIGNAL="BUY"
-	elif ORDERS_NBR > 0 and RSI_VAL >= 70:
-		SIGNAL="SELL"
+		#STEP4 - PERFORM ACTION
+		if SIGNAL == "BUY":
+			print("[" + DT_STR + "]",end="") #affichage de la date & time
+			print(" [RSI: " + str(RSI_VAL).rjust(5," ")+"]",end="")
+			orderid = place_buy_order(EX_BINANCE, SYMBOL, TRADING_QTY, "market")
+			orderinfo = EX_BINANCE.fetch_order(id=orderid,symbol=SYMBOL)
+			order_cost = orderinfo['cost']
+			order_fees_cost = orderinfo['fees'][0]['cost']
+			order_fees_currency = orderinfo['fees'][0]['currency']
+			ORDERS_LIST.append([orderid,order_cost,order_fees_cost,order_fees_currency])
+			ORDERS_NBR += 1
+		elif SIGNAL == "SELL":
+			for sell_cpt in range(ORDERS_NBR):
+				print("[" + DT_STR + "]",end="") #affichage de la date & time
+				print(" [RSI: " + str(RSI_VAL).rjust(5," ")+"]",end="")
+				orderid = place_sell_order(EX_BINANCE, SYMBOL, TRADING_QTY, "market",nonewline=True)
+				sell_orderinfo = EX_BINANCE.fetch_order(id=orderid,symbol=SYMBOL)
+				sell_order_amount = sell_orderinfo['amount']
+				sell_order_cost = sell_orderinfo['cost']
+				sell_order_fees_cost = sell_orderinfo['fees'][0]['cost']
+				sell_order_fees_currency = sell_orderinfo['fees'][0]['currency']
+				print(" [BUYED AT: " + str(ORDERS_LIST[sell_cpt][1]) + "] ",end="")
+				if sell_order_cost > ORDERS_LIST[sell_cpt][1]:
+					print("--> " + C_GREEN + "GOOD TRADE" + C_NORMAL)
+				elif  sell_order_cost < ORDERS_LIST[sell_cpt][1]:
+					print("--> " + C_RED + "BAD TRADE" + C_NORMAL)
+				else:
+					print(" ")
+			ORDERS_NBR = 0
 
-	#STEP4 - PERFORM ACTION
-	if SIGNAL == "BUY":
-		orderid = place_buy_order(EX_BINANCE, SYMBOL, TRADING_QTY, "market")
-		#orderinfo = EX_BINANCE.fetch_order(id=orderid,symbol=SYMBOL)
-		#order_cost = orderinfo['cost']
-		#order_fees_cost = orderinfo['fees'][0]['cost']
-		#order_fees_currency = orderinfo['fees'][0]['currency']
-		ORDERS_NBR += 1
-	elif SIGNAL == "SELL":
-		for sell_cpt in range(ORDERS_NBR):
-			orderid = place_sell_order(EX_BINANCE, SYMBOL, TRADING_QTY, "market")
-			#orderinfo = EX_BINANCE.fetch_order(id=orderid,symbol=SYMBOL)
-			#order_amount = orderinfo['amount']
-			#order_cost = orderinfo['cost']
-			#order_fees_cost = orderinfo['fees'][0]['cost']
-			#order_fees_currency = orderinfo['fees'][0]['currency']
-		ORDERS_NBR = 0
+		#STEP 5 Affichage général du status du wallet
+		#STEP1 - on affiche la date/heure au format -  dd/mm/YY H:M:S
+		now = datetime.now()
+		DT_STR = now.strftime("%d/%m/%Y %H:%M:%S")
 
-	#STEP5 - quantité actuelle de SRC_SYMBOL
-	MY_SRC_QTY = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
+		print("[" + DT_STR + "]",end="") #affichage de la date & time
 
-	#STEP 6 - AFFICHAGE DES INFOS
-	print("[" + DT_STR + "]",end="")
-	print(" [RSI: " + str(RSI_VAL)+"]",end="")
-	print(" [ORDRES: "+str(ORDERS_NBR)+"/"+str(TRADING_MAX)+"]",end="")
-	print(" ["+SRC_SYMBOL+": "+str(MY_SRC_QTY)+"]")
+		#STEP5 - quantité actuelle de SRC_SYMBOL
+		MY_SRC_QTY = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
 
+		#STEP 6 - AFFICHAGE DES INFOS
+		print(" [RSI: " + str(RSI_VAL).rjust(5," ")+"]",end="")
+		print(" [ORDRES: "+str(ORDERS_NBR)+"/"+str(TRADING_MAX)+"]",end="")
+		print(" ["+SRC_SYMBOL+": "+str(MY_SRC_QTY)+"]",end="")
+		val_diff = float("{:.2f}".format(MY_SRC_QTY - MY_INITIAL_SRC_QTY))
+		if val_diff > 0:
+			print(" [DIFF: " + C_GREEN + str(val_diff) + C_NORMAL + "]")
+		elif val_diff < 0:
+			print(" [DIFF: " + C_RED + str(val_diff) + C_NORMAL + "]")
+		else:
+			print("")
+
+	except Exception as e:
+		print("[" + DT_STR + "]",end="") #affichage de la date & time
+		print(" [ERROR 201] [STATUS: " + C_RED + "BOT general failure" + C_NORMAL + "] [REASONS: Network issue ? exchange not responding ?")
+		#print(e)
 	time.sleep(SLEEP_TIME_SEC)
-
 #testfunc(EX_BINANCE)
 #print("USDT: "+str(wallet_status(EX_BINANCE,"USDT")))
 #print("BTC: "+str(wallet_status(EX_BINANCE,"BTC")))
