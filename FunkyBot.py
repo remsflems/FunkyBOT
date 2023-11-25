@@ -28,16 +28,16 @@ print(result)
 #### 1 - PARAMS ####
 # Initalisation des diverses variables globales du script.
 print("[+] PARAMS")
-#API_KEY = 'API KEY ID string'
-#API_SECRET = 'API KEY SECRET password'
-API_KEY = '73GisqkQqAy7MyQZj5RhYBKttgIjWFmoW7QeUWsminx8TNfBLoY3F2Qh3BlfOZCy'
-API_SECRET = 'xhpucJmBMUJDW7qqm5FtQYySWMyGYOgFfwPcnQfQVpUsCxxROsnKVHkYi91PbuRT'
+API_KEY = 'API KEY ID string'
+API_SECRET = 'API KEY SECRET password'
 EX_BINANCE = ccxt.binance({ # Initialiser l'exchange Binance - En mode testnet
     'apiKey': API_KEY,
     'secret': API_SECRET,
     'enableRateLimit': True,
 })
 EX_BINANCE.set_sandbox_mode(True) #important pour le mode sandbox
+EX_BINANCE.feeTiers = True  # Enable fee tiers
+
 #ci-dessous, les parametres généraux de trading du BOT
 SRC_SYMBOL = "USDT" # la devise source
 DST_SYMBOL = "BTC" # la devise à trader
@@ -45,8 +45,8 @@ SYMBOL = DST_SYMBOL + SRC_SYMBOL # symbole
 SYMBOL_SLASH = DST_SYMBOL + "/" + SRC_SYMBOL #symbole formaté avec un slash
 TRADING_QTY = 0.003  # Quantité unitaire à trader (par trade)
 TRADING_MAX = 10 # Nombe maximum de trades autorisés.
-RSI_PERIOD = 30 # l'historique (en minutes) pour le calcul du RSI
-SLEEP_TIME_SEC = 120 # nombre de secondes entre chaque itération
+RSI_PERIOD = 20 # l'historique (en minutes) pour le calcul du RSI
+SLEEP_TIME_SEC = 60 # nombre de secondes entre chaque itération
 #ci-dessous, des variables pour coloriser le texte (couleur)
 C_RED = '\033[1;31;40m'
 C_GREEN = '\033[1;32;40m'
@@ -90,6 +90,14 @@ def place_buy_order(exchange, symbol, quantity, ordertype = "market"):
 		order_fees_cost = orderinfo['fees'][0]['cost']
 		order_fees_currency = orderinfo['fees'][0]['currency']
 		print(" [" + C_BLUE + "ACHAT" + C_NORMAL + "] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
+	elif ordertype == "limit":
+		order = exchange.create_limit_buy_order(symbol, quantity, get_pair_average_price(exchange, SYMBOL) + 0.05)
+		orderinfo = exchange.fetch_order(id=order['id'], symbol=symbol)
+		order_amount = orderinfo['amount']
+		order_cost = orderinfo['cost']
+		order_fees_cost = orderinfo['fees'][0]['cost']
+		order_fees_currency = orderinfo['fees'][0]['currency']
+		print("  [ACHAT] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: " + str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
 	else:
 		print("[ERROR 102] - unsupported type")
 		return "NaN"
@@ -110,6 +118,14 @@ def place_sell_order(exchange, symbol, quantity, ordertype = "market", nonewline
 			print(" [" + C_BLUE + "VENTE" + C_NORMAL + "] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]",end="")
 		else:
 			print(" [" + C_BLUE + "VENTE" + C_NORMAL + "] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
+	elif ordertype == "limit":
+		order = exchange.create_limit_sell_order(symbol, quantity, get_pair_average_price(exchange, SYMBOL)-0.05)
+		orderinfo = exchange.fetch_order(id=order['id'],symbol=symbol)
+		order_amount = orderinfo['amount']
+		order_cost = orderinfo['cost']
+		order_fees_cost = orderinfo['fees'][0]['cost']
+		order_fees_currency = orderinfo['fees'][0]['currency']
+		print("  [VENTE] [" + str(orderinfo['amount']) + " " + DST_SYMBOL + "] [PRICE: " + str(order_cost) + " " + str(SRC_SYMBOL) + "] [FEES: "+str(order_fees_cost) + " " + str(order_fees_currency) + "] [ID: " + str(order['id']) + "]")
 	else:
 		print("[ERROR 103] - unsupported type")
 		return "NaN"
@@ -236,12 +252,22 @@ while True:
 
 		#STEP3 - SIGNAL par rapport au RSI
 		SIGNAL="WAIT"
+		"""
 		if ORDERS_NBR < TRADING_MAX and RSI_VAL < 30: #si on a pas ateint le MAX d'ordres en cours
 			if RSI_PREV < 30 and RSI_VAL > RSI_PREV:
 				if RSI_PREV_PREV < 30 and RSI_PREV < RSI_PREV_PREV:
 					SIGNAL="BUY"
 		elif ORDERS_NBR > 0 and RSI_VAL > 70:
 			SIGNAL="SELL"
+		"""
+		#Si on a pas ateint le MAX d'ordres en cours. Si RS_VAL et RSI_PREV < 30 et RSI_VAL est inferieur à RSI_PREV
+		if ORDERS_NBR < TRADING_MAX and RSI_VAL < 30 and RSI_PREV < 30 and RSI_VAL < RSI_PREV :
+			SIGNAL="BUY"
+		#Si il y a des ordre en cours. et que RSI_VAL est > 60 , et RSI_PREV et RSI_PREV_PREV > 70
+		elif ORDERS_NBR > 0 and RSI_VAL > 60 and RSI_PREV > 70 and RSI_PREV_PREV > 70 :
+			SIGNAL="SELL"
+		
+		#STEP 2 BIS - Update valeurs precedentes pour mémoriser les RSI des boucles précédente et boucle -2.
 		RSI_PREV_PREV = RSI_PREV
 		RSI_PREV = RSI_VAL
 
@@ -302,6 +328,8 @@ while True:
 		print(" [ERROR 201] [STATUS: " + C_RED + "BOT general failure" + C_NORMAL + "] [REASONS: Network issue ? exchange not responding ?")
 		#print(e)
 	time.sleep(SLEEP_TIME_SEC)
+	
+
 #testfunc(EX_BINANCE)
 #print("USDT: "+str(wallet_status(EX_BINANCE,"USDT")))
 #print("BTC: "+str(wallet_status(EX_BINANCE,"BTC")))
