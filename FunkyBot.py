@@ -5,7 +5,25 @@ from sys import exit
 from datetime import datetime
 import signal
 import time
+import threading
+import csv
+import os
 
+try:
+	import matplotlib
+	import matplotlib.pyplot as plt #pip3 install ccxt
+except:
+	print("[ERROR 90] matplotlib not found: pip3 install matplotlib")
+	exit(1)
+	
+try:
+	matplotlib.use('tkagg') #apt-get install python3-tk
+except:
+	print("[ERROR 93] tkinter not found: apt-get install python3-tk")
+	print("		or pip3 install tk")
+	print("[ERROR 94] PIL & imageTK not found: apt-get install python3-pil.imagetk")
+	print("		or pip3 install Pillow")
+	exit(1)
 try:
 	import ccxt #pip3 install ccxt
 except:
@@ -25,11 +43,28 @@ result = pyfiglet.figlet_format("FunkyBOT")
 print(result)
 ###########################
 
+#### 0 - PRE-ACTIONS ####
+#On créé le fichier CSV
+# Check if the file exists
+CSV_FILE = "asset_data.csv"
+if os.path.exists(CSV_FILE):
+	# Remove the file if it exists
+	os.remove(CSV_FILE)
+    
+# Create the CSV file
+header = ['datetime','rsi','btc_price_in_usdt','wallet_qty']
+with open(CSV_FILE, 'w', newline='') as file:
+	writer = csv.writer(file) #set a writer handler
+	writer.writerow(header) # write the header
+###########################
+
 #### 1 - PARAMS ####
 # Initalisation des diverses variables globales du script.
 print("[+] PARAMS")
-API_KEY = 'API KEY ID string'
-API_SECRET = 'API KEY SECRET password'
+#API_KEY = 'API KEY ID string'
+#API_SECRET = 'API KEY SECRET password'
+API_KEY = 'HtKgl8qlzpa3Hz79TOgfQcpwtv82KvXfujBqEMieykSsam3xJ8vmhqV8EMyRSc8O'
+API_SECRET = 'zeC1HglEIp7kFxyvoqu7I16me1apq1WOQGDsUgGGSPpzBns3mRAeYXnnzzKNJMxk'
 EX_BINANCE = ccxt.binance({ # Initialiser l'exchange Binance - En mode testnet
     'apiKey': API_KEY,
     'secret': API_SECRET,
@@ -45,7 +80,7 @@ SYMBOL = DST_SYMBOL + SRC_SYMBOL # symbole
 SYMBOL_SLASH = DST_SYMBOL + "/" + SRC_SYMBOL #symbole formaté avec un slash
 TRADING_QTY = 0.003  # Quantité unitaire à trader (par trade)
 TRADING_MAX = 10 # Nombe maximum de trades autorisés.
-RSI_PERIOD = 20 # l'historique (en minutes) pour le calcul du RSI
+RSI_PERIOD = 30 # l'historique (en minutes) pour le calcul du RSI
 SLEEP_TIME_SEC = 60 # nombre de secondes entre chaque itération
 #ci-dessous, des variables pour coloriser le texte (couleur)
 C_RED = '\033[1;31;40m'
@@ -53,6 +88,7 @@ C_GREEN = '\033[1;32;40m'
 C_BLUE = '\033[1;34;40m'
 C_NORMAL ='\033[0;0;0m'
 #### FIN DU PARAMS #####
+
 
 #### 2 - FONCTIONS ####
 print("[+] FONCTIONS")
@@ -170,6 +206,7 @@ def get_market_data(exchange, symbol, trigger="close",frame="1m",limit=RSI_PERIO
 #Elle calcule donc le RSI à parti de la fonction get_market_data
 def calculate_rsi(exchange, symbol,trigger="close",frame="1m",limit=RSI_PERIOD):
 	data = get_market_data(exchange, symbol, trigger, frame, limit) #GET OHLCV data
+	#print(data)
 	deltas = [data[i][1] - data[i-1][1] for i in range(1, len(data))]
 	gain = [deltas[i] if deltas[i] > 0 else 0 for i in range(len(deltas))]
 	loss = [abs(deltas[i]) if deltas[i] < 0 else 0 for i in range(len(deltas))]
@@ -213,29 +250,40 @@ def TERMINATE_handler(signum, frame):
 			print(" ")
 	print("[GOODBYE] Copyright: FunkyBot")
 	exit(1)
+	
+# Define your two tasks as functions
+def SLEEPING():
+	time.sleep(SLEEP_TIME_SEC)
+
 #### FIN DU FONCTIONS #####
 
 
 #### 3 - CONFIG ####
-print("[+] CONFIG")
-print("  [-] La devise refuge est le " + C_GREEN + SRC_SYMBOL + C_NORMAL)
-print("  [-] La devise à commercer est le " + C_GREEN + DST_SYMBOL + C_NORMAL)
-print("  [-] L'objectif est donc de gagner des " + C_GREEN + SRC_SYMBOL + C_NORMAL + " en commercant le symbole " + C_GREEN + SYMBOL + C_NORMAL + " ( " + C_GREEN + SYMBOL_SLASH + C_NORMAL + " )")
-print("  [-] La fréquence d'analyse est de " + C_GREEN + str(SLEEP_TIME_SEC) + " secondes" + C_NORMAL)
-MY_INITIAL_SRC_QTY = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
-print("  [-] La quantité initiale est de " + C_GREEN + str(MY_INITIAL_SRC_QTY) + " " + SRC_SYMBOL +C_NORMAL)
-AVG_PRICE = get_pair_average_price(EX_BINANCE, SYMBOL_SLASH)
-TRADING_PRICE = float("{:.2f}".format(TRADING_QTY * AVG_PRICE))
-print("  [-] Les ordres sont de " + C_GREEN + str(TRADING_QTY) + " " + DST_SYMBOL + C_NORMAL + " ( environ " + C_GREEN + str(TRADING_PRICE) + " " + SRC_SYMBOL + C_NORMAL + " )")
-MAX_EXPOSURE = float("{:.2f}".format(TRADING_MAX * TRADING_PRICE))
-print("  [-] " + C_GREEN + str(TRADING_MAX) + C_NORMAL + " ordres sont cumulables pour une exposition maximum de " + C_GREEN + str(MAX_EXPOSURE) + " " + SRC_SYMBOL + C_NORMAL)
-print("  [-] La periode de calcul du RSI est de " + C_GREEN + str(RSI_PERIOD) + C_NORMAL + " minutes")
-ALLOWED_EXPOSURE = MY_INITIAL_SRC_QTY * 70/100
-if MAX_EXPOSURE > ALLOWED_EXPOSURE:
-	print("[ERROR 104] "+ C_RED + "CONFIG KO" + C_NORMAL + " L'exposition maximum ne doit pas dépasser 70% de ma quantité initiale.")
+try:
+	print("[+] CONFIG")
+	print("  [-] La devise refuge est le " + C_GREEN + SRC_SYMBOL + C_NORMAL)
+	print("  [-] La devise à commercer est le " + C_GREEN + DST_SYMBOL + C_NORMAL)
+	print("  [-] L'objectif est donc de gagner des " + C_GREEN + SRC_SYMBOL + C_NORMAL + " en commercant le symbole " + C_GREEN + SYMBOL + C_NORMAL + " ( " + C_GREEN + SYMBOL_SLASH + C_NORMAL + " )")
+	print("  [-] La fréquence d'analyse est de " + C_GREEN + str(SLEEP_TIME_SEC) + " secondes" + C_NORMAL)
+	MY_INITIAL_SRC_QTY = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
+	VALUE_AFTER_SELL = MY_INITIAL_SRC_QTY
+	print("  [-] La quantité initiale est de " + C_GREEN + str(MY_INITIAL_SRC_QTY) + " " + SRC_SYMBOL +C_NORMAL)
+	AVG_PRICE = get_pair_average_price(EX_BINANCE, SYMBOL_SLASH)
+	TRADING_PRICE = float("{:.2f}".format(TRADING_QTY * AVG_PRICE))
+	print("  [-] Les ordres sont de " + C_GREEN + str(TRADING_QTY) + " " + DST_SYMBOL + C_NORMAL + " ( environ " + C_GREEN + str(TRADING_PRICE) + " " + SRC_SYMBOL + C_NORMAL + " )")
+	MAX_EXPOSURE = float("{:.2f}".format(TRADING_MAX * TRADING_PRICE))
+	print("  [-] " + C_GREEN + str(TRADING_MAX) + C_NORMAL + " ordres sont cumulables pour une exposition maximum de " + C_GREEN + str(MAX_EXPOSURE) + " " + SRC_SYMBOL + C_NORMAL)
+	print("  [-] La periode de calcul du RSI est de " + C_GREEN + str(RSI_PERIOD) + C_NORMAL + " minutes")
+	ALLOWED_EXPOSURE = MY_INITIAL_SRC_QTY * 70/100
+	if MAX_EXPOSURE > ALLOWED_EXPOSURE:
+		print("[ERROR 104] "+ C_RED + "CONFIG KO" + C_NORMAL + " L'exposition maximum ne doit pas dépasser 70% de ma quantité initiale.")
+		exit(1)
+	else:
+		print("  [-] " + C_GREEN + "CONFIG: OK" + C_NORMAL)
+except Exception as ex:
+	print("[ERROR 106] "+ C_RED + "CONFIG KO" + C_NORMAL + " Something went wrong! Exchange unreachable (network)?")
+	print(ex)
 	exit(1)
-else:
-	print("  [-] " + C_GREEN + "CONFIG: OK" + C_NORMAL)
 #### FIN DU CONFIG #####
 
 #### 3 - INIT ####
@@ -246,13 +294,34 @@ ORDERS_NBR=0
 ORDERS_LIST=[]
 RSI_PREV=50
 RSI_PREV_PREV=50
+
+
+#GRAPHIC GUI - SETUP
+plt.ion()
+fig,ax = plt.subplots(figsize=(12, 8))
+ax.set_xlabel("dates", fontsize = 14) # set x-axis label 
+ax.set_ylabel("RSI", color="red", fontsize=10) # set y-axis label
+ax.yaxis.label.set_color('red')
+ax.tick_params(axis='y', colors='red') 
+ax2=ax.twinx() # twin object for two different y-axis on the sample plot
+ax2.set_ylabel(SYMBOL_SLASH+" price",color="blue",fontsize=10)
+ax2.tick_params(axis='y', colors='blue') 
+ax3=ax2.twinx() # twin object for two different y-axis on the sample plot
+ax3.set_ylabel("Wallet",color="green",fontsize=10)
+ax3.tick_params(axis='y', colors='green')
+	
 while True:
+	#STEP 0: definir le thead pour patienter. Pou chaque tour. (30 sec minimum pour eviter les bugs)
+	thread1 = threading.Thread(target=SLEEPING)
+	thread1.start()
+	
 	#STEP1 - on affiche la date/heure au format -  dd/mm/YY H:M:S
 	now = datetime.now()
 	DT_STR = now.strftime("%d/%m/%Y %H:%M:%S")
 	try:
 		#STEP2 - on calcule le RSI
 		RSI_VAL = calculate_rsi(EX_BINANCE,SYMBOL,limit=RSI_PERIOD)
+		SYMBOL_AVG_PRICE = float("{:.2f}".format(get_pair_average_price(EX_BINANCE, SYMBOL_SLASH)))
 
 		#STEP3 - SIGNAL par rapport au RSI
 		SIGNAL="WAIT"
@@ -266,7 +335,7 @@ while True:
 		"""
 
 		#Si on a pas ateint le MAX d'ordres en cours. Si RS_VAL et RSI_PREV < 30 et RSI_VAL est inferieur à RSI_PREV
-		if ORDERS_NBR < TRADING_MAX and RSI_VAL < 30 and RSI_PREV < 30 and RSI_VAL < RSI_PREV :
+		if ORDERS_NBR < TRADING_MAX and RSI_VAL < 30 and RSI_PREV < 30 and RSI_VAL <= RSI_PREV :
 			SIGNAL="BUY"
 		#Si il y a des ordre en cours. et que RSI_VAL est > 60 , et RSI_PREV et RSI_PREV_PREV > 70
 		elif ORDERS_NBR > 0 and RSI_VAL > 60 and RSI_PREV > 70 and RSI_PREV_PREV > 70 :
@@ -305,6 +374,7 @@ while True:
 				else:
 					print(" ")
 			ORDERS_NBR = 0
+			VALUE_AFTER_SELL = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
 
 		#STEP 5 Affichage général du status du wallet
 		#STEP1 - on affiche la date/heure au format -  dd/mm/YY H:M:S
@@ -328,13 +398,41 @@ while True:
 			print(" [DIFF: " + C_RED + str(val_diff) + C_NORMAL + "]")
 		else:
 			print("")
+		
+		#STEP 7 - analyses avancées.
+		# On stocke les données en csv.
+		line_to_append = [DT_STR, RSI_VAL, SYMBOL_AVG_PRICE, VALUE_AFTER_SELL]
+		with open(CSV_FILE, 'a', newline='') as csvfile:
+			writer = csv.writer(csvfile)
+			writer.writerow(line_to_append)
+
+		dates = []
+		rsi_values = []
+		symbol_values = []
+		wallet_values = []
+		with open(CSV_FILE, 'r') as file: #open CSV file
+			reader = csv.reader(file)
+			next(reader)  # Skip header row if it exists
+			for row in reader: #boucle pour MAJ (daes, rsi_values & symbol_values) avec les données venant du CSV (rreprésentées par la variable row)
+				dates.append(datetime.strptime(row[0], '%d/%m/%Y %H:%M:%S'))
+				rsi_values.append(float(row[1]))
+				symbol_values.append(float(row[2]))
+				wallet_values.append(float(row[3]))
+		#affichage / update du gaphique avec les données mises à jour	
+		ax.plot(dates, rsi_values, color="red", marker="o") # make a plot
+		ax2.plot(dates, symbol_values ,color="blue",marker="o") # make a plot with different y-axis using second axis object
+		ax3.plot(dates, wallet_values ,color="green",marker="o") # make a plot with different y-axis using third axis object
+		plt.draw()
+		plt.pause(1)
 
 	except Exception as e:
 		print("[" + DT_STR + "]",end="") #affichage de la date & time
 		print(" [ERROR 201] [STATUS: " + C_RED + "BOT general failure" + C_NORMAL + "] [REASONS: Network issue ? exchange not responding ?")
 		print(e)
-	time.sleep(SLEEP_TIME_SEC)
-	
+		
+	#time.sleep(SLEEP_TIME_SEC)
+	# Wait for both threads to finish execution
+	thread1.join()
 
 #testfunc(EX_BINANCE)
 #print("USDT: "+str(wallet_status(EX_BINANCE,"USDT")))
