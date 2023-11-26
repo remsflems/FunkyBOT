@@ -170,19 +170,23 @@ def get_market_data(exchange, symbol, trigger="close",frame="1m",limit=RSI_PERIO
 #Elle calcule donc le RSI à parti de la fonction get_market_data
 def calculate_rsi(exchange, symbol,trigger="close",frame="1m",limit=RSI_PERIOD):
 	data = get_market_data(exchange, symbol, trigger, frame, limit) #GET OHLCV data
-
 	deltas = [data[i][1] - data[i-1][1] for i in range(1, len(data))]
 	gain = [deltas[i] if deltas[i] > 0 else 0 for i in range(len(deltas))]
 	loss = [abs(deltas[i]) if deltas[i] < 0 else 0 for i in range(len(deltas))]
-
 	avg_gain = sum(gain) / len(data)
 	avg_loss = sum(loss) / len(data)
-
 	rsi = None  #variable initialization
 
+	if avg_loss == 0: #FAILSAFE EN SITUATION CRITIQUE
+		avg_loss = 0.00001
+	
 	for i in range(len(data)-1):
 		avg_gain = (avg_gain * (len(data) - 1) + gain[i]) / len(data)
 		avg_loss = (avg_loss * (len(data) - 1) + loss[i]) / len(data)
+		
+		if avg_loss == 0: #FAILSAFE EN SITUATION CRITIQUE
+			avg_loss = 0.00001
+
 		rs = avg_gain / avg_loss
 		rsi = 100 - (100 / (1 + rs))
 
@@ -260,6 +264,7 @@ while True:
 		elif ORDERS_NBR > 0 and RSI_VAL > 70:
 			SIGNAL="SELL"
 		"""
+
 		#Si on a pas ateint le MAX d'ordres en cours. Si RS_VAL et RSI_PREV < 30 et RSI_VAL est inferieur à RSI_PREV
 		if ORDERS_NBR < TRADING_MAX and RSI_VAL < 30 and RSI_PREV < 30 and RSI_VAL < RSI_PREV :
 			SIGNAL="BUY"
@@ -306,6 +311,7 @@ while True:
 		now = datetime.now()
 		DT_STR = now.strftime("%d/%m/%Y %H:%M:%S")
 
+
 		print("[" + DT_STR + "]",end="") #affichage de la date & time
 
 		#STEP5 - quantité actuelle de SRC_SYMBOL
@@ -326,7 +332,7 @@ while True:
 	except Exception as e:
 		print("[" + DT_STR + "]",end="") #affichage de la date & time
 		print(" [ERROR 201] [STATUS: " + C_RED + "BOT general failure" + C_NORMAL + "] [REASONS: Network issue ? exchange not responding ?")
-		#print(e)
+		print(e)
 	time.sleep(SLEEP_TIME_SEC)
 	
 
