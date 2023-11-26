@@ -61,10 +61,8 @@ with open(CSV_FILE, 'w', newline='') as file:
 #### 1 - PARAMS ####
 # Initalisation des diverses variables globales du script.
 print("[+] PARAMS")
-#API_KEY = 'API KEY ID string'
-#API_SECRET = 'API KEY SECRET password'
-API_KEY = 'HtKgl8qlzpa3Hz79TOgfQcpwtv82KvXfujBqEMieykSsam3xJ8vmhqV8EMyRSc8O'
-API_SECRET = 'zeC1HglEIp7kFxyvoqu7I16me1apq1WOQGDsUgGGSPpzBns3mRAeYXnnzzKNJMxk'
+API_KEY = 'API KEY ID string'
+API_SECRET = 'API KEY SECRET password'
 EX_BINANCE = ccxt.binance({ # Initialiser l'exchange Binance - En mode testnet
     'apiKey': API_KEY,
     'secret': API_SECRET,
