@@ -294,9 +294,9 @@ RSI_PREV=50
 RSI_PREV_PREV=50
 
 
-#GRAPHIC GUI - SETUP
+#####GRAPHIC GUI - SETUP######
 plt.ion()
-fig,ax = plt.subplots(figsize=(12, 8))
+fig,ax = plt.subplots(figsize=(10, 8))
 ax.set_xlabel("dates", fontsize = 14) # set x-axis label 
 ax.set_ylabel("RSI", color="red", fontsize=10) # set y-axis label
 ax.yaxis.label.set_color('red')
@@ -307,6 +307,7 @@ ax2.tick_params(axis='y', colors='blue')
 ax3=ax2.twinx() # twin object for two different y-axis on the sample plot
 ax3.set_ylabel("Wallet",color="green",fontsize=10)
 ax3.tick_params(axis='y', colors='green')
+#######################
 	
 while True:
 	#STEP 0: definir le thead pour patienter. Pou chaque tour. (30 sec minimum pour eviter les bugs)
@@ -332,18 +333,18 @@ while True:
 			SIGNAL="SELL"
 		"""
 
-		#Si on a pas ateint le MAX d'ordres en cours. Si RS_VAL et RSI_PREV < 30 et RSI_VAL est inferieur à RSI_PREV
+		#3.1: Si on a pas ateint le MAX d'ordres en cours. Si RS_VAL et RSI_PREV < 30 et RSI_VAL est inferieur à RSI_PREV
 		if ORDERS_NBR < TRADING_MAX and RSI_VAL < 30 and RSI_PREV < 30 and RSI_VAL <= RSI_PREV :
 			SIGNAL="BUY"
-		#Si il y a des ordre en cours. et que RSI_VAL est > 60 , et RSI_PREV et RSI_PREV_PREV > 70
+		#3.2: Si il y a des ordre en cours. et que RSI_VAL est > 60 , et RSI_PREV et RSI_PREV_PREV > 70
 		elif ORDERS_NBR > 0 and RSI_VAL > 60 and RSI_PREV > 70 and RSI_PREV_PREV > 70 :
 			SIGNAL="SELL"
 		
-		#STEP 2 BIS - Update valeurs precedentes pour mémoriser les RSI des boucles précédente et boucle -2.
+		#{STEP 2 BIS} - Update valeurs precedentes pour mémoriser les RSI des boucles précédente et boucle -2.
 		RSI_PREV_PREV = RSI_PREV
 		RSI_PREV = RSI_VAL
 
-		#STEP4 - PERFORM ACTION
+		#STEP 4 - PERFORM ACTION
 		if SIGNAL == "BUY":
 			print("[" + DT_STR + "]",end="") #affichage de la date & time
 			print(" [RSI: " + str(RSI_VAL).rjust(5," ")+"]",end="")
@@ -375,17 +376,15 @@ while True:
 			VALUE_AFTER_SELL = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
 
 		#STEP 5 Affichage général du status du wallet
-		#STEP1 - on affiche la date/heure au format -  dd/mm/YY H:M:S
+		#5.1: on affiche la date/heure au format -  dd/mm/YY H:M:S
 		now = datetime.now()
 		DT_STR = now.strftime("%d/%m/%Y %H:%M:%S")
-
-
 		print("[" + DT_STR + "]",end="") #affichage de la date & time
 
-		#STEP5 - quantité actuelle de SRC_SYMBOL
+		#5.2: quantité actuelle de SRC_SYMBOL
 		MY_SRC_QTY = float("{:.2f}".format(wallet_status(EX_BINANCE, SRC_SYMBOL, "free")))
 
-		#STEP 6 - AFFICHAGE DES INFOS
+		#5.3: AFFICHAGE DES INFOS
 		print(" [RSI: " + str(RSI_VAL).rjust(5," ")+"]",end="")
 		print(" [ORDRES: "+str(ORDERS_NBR)+"/"+str(TRADING_MAX)+"]",end="")
 		print(" ["+SRC_SYMBOL+": "+str(MY_SRC_QTY)+"]",end="")
@@ -397,13 +396,14 @@ while True:
 		else:
 			print("")
 		
-		#STEP 7 - analyses avancées.
+		#STEP 6 - analyses avancées.
 		# On stocke les données en csv.
 		line_to_append = [DT_STR, RSI_VAL, SYMBOL_AVG_PRICE, VALUE_AFTER_SELL]
 		with open(CSV_FILE, 'a', newline='') as csvfile:
 			writer = csv.writer(csvfile)
 			writer.writerow(line_to_append)
 
+		#6.1: On lis le csv avant d'afficher les donées sous forme de graphique
 		dates = []
 		rsi_values = []
 		symbol_values = []
@@ -416,21 +416,18 @@ while True:
 				rsi_values.append(float(row[1]))
 				symbol_values.append(float(row[2]))
 				wallet_values.append(float(row[3]))
-		#affichage / update du gaphique avec les données mises à jour	
+		#6.2: affichage / update du gaphique avec les données mises à jour	
 		ax.plot(dates, rsi_values, color="red", marker="o") # make a plot
 		ax2.plot(dates, symbol_values ,color="blue",marker="o") # make a plot with different y-axis using second axis object
 		ax3.plot(dates, wallet_values ,color="green",marker="o") # make a plot with different y-axis using third axis object
 		plt.draw()
 		plt.pause(1)
-
 	except Exception as e:
 		print("[" + DT_STR + "]",end="") #affichage de la date & time
 		print(" [ERROR 201] [STATUS: " + C_RED + "BOT general failure" + C_NORMAL + "] [REASONS: Network issue ? exchange not responding ?")
 		print(e)
 		
-	#time.sleep(SLEEP_TIME_SEC)
-	# Wait for both threads to finish execution
-	thread1.join()
+	thread1.join() # Wait for both threads to finish execution
 
 #testfunc(EX_BINANCE)
 #print("USDT: "+str(wallet_status(EX_BINANCE,"USDT")))
